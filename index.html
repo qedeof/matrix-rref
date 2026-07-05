@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Linear System RREF Solver</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Hide number input arrows */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-800 font-sans pb-20">
+
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center gap-3">
+            <div class="bg-blue-600 p-2 rounded-lg text-white">
+                <i data-lucide="calculator" class="w-6 h-6"></i>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold text-slate-900 leading-tight">Linear System Solver</h1>
+                <p class="text-sm text-slate-500 hidden sm:block">Step-by-step Gaussian Elimination to RREF</p>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        
+        <!-- Introduction & Config Card -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="p-6 sm:p-8 space-y-6">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                            <i data-lucide="list-ordered" class="w-5 h-5 text-blue-500"></i>
+                            1. Define your System
+                        </h2>
+                        <p class="text-sm text-slate-500 mt-1">Set the dimensions for your system of linear equations.</p>
+                    </div>
+                    
+                    <div class="flex items-center gap-4 bg-slate-50 p-2 rounded-xl border border-slate-200">
+                        <div class="flex flex-col px-3">
+                            <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Equations (Rows)</label>
+                            <input 
+                                type="number" 
+                                id="rows-input"
+                                min="2" max="5" 
+                                value="3" 
+                                class="w-16 p-1 text-center bg-white border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                        </div>
+                        <div class="w-px h-10 bg-slate-200"></div>
+                        <div class="flex flex-col px-3">
+                            <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Variables (Cols)</label>
+                            <input 
+                                type="number" 
+                                id="cols-input"
+                                min="2" max="6" 
+                                value="3" 
+                                class="w-16 p-1 text-center bg-white border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Matrix Input Area -->
+                <div class="bg-slate-50 p-6 rounded-xl border border-slate-200 flex flex-col items-center overflow-x-auto">
+                    
+                    <!-- Headers (x, y, z, =) -->
+                    <div id="matrix-headers" class="mb-4 flex items-center justify-center w-full min-w-max gap-4 pr-12">
+                        <!-- Populated by JS -->
+                    </div>
+
+                    <!-- Input Grid -->
+                    <div class="relative inline-flex items-center justify-center p-2">
+                        <div class="absolute left-0 top-0 bottom-0 w-3 border-l-4 border-t-4 border-b-4 border-slate-800 rounded-l-xl pointer-events-none"></div>
+                        <div class="absolute right-0 top-0 bottom-0 w-3 border-r-4 border-t-4 border-b-4 border-slate-800 rounded-r-xl pointer-events-none"></div>
+                        
+                        <div id="matrix-inputs" class="grid gap-x-4 gap-y-3 px-4 py-2">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+
+                    <p class="mt-6 text-sm text-slate-500 text-center max-w-lg flex items-center justify-center gap-2">
+                        <i data-lucide="info" class="w-4 h-4"></i>
+                        Enter coefficients. You can use fractions (e.g., <code class="bg-slate-200 px-1 rounded">-1/2</code>) or decimals.
+                    </p>
+                </div>
+
+                <div id="error-container"></div>
+
+                <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                    <button 
+                        id="btn-clear"
+                        class="px-5 py-2.5 text-sm font-medium text-slate-600 hover:text-slate-900 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2"
+                    >
+                        <i data-lucide="refresh-cw" class="w-4 h-4"></i> Clear
+                    </button>
+                    <button 
+                        id="btn-solve"
+                        class="px-6 py-2.5 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-sm hover:shadow transition-all flex items-center gap-2"
+                    >
+                        Solve Step-by-Step <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results / Steps Area -->
+        <div id="solution-area"></div>
+
+    </main>
+
+    <script>
+        // --- Exact Fractional Math Engine ---
+        const gcd = (a, b) => {
+            a = Math.abs(a);
+            b = Math.abs(b);
+            return b === 0 ? a : gcd(b, a % b);
+        };
+
+        class Frac {
+            constructor(n, d = 1) {
+                let sign = (n < 0) ^ (d < 0) ? -1 : 1;
+                n = Math.abs(n);
+                d = Math.abs(d);
+                if (d === 0) {
+                    this.n = 0;
+                    this.d = 0; 
+                    return;
+                }
+                let g = gcd(n, d);
+                this.n = sign * (Math.round(n / g));
+                this.d = Math.round(d / g);
+            }
+            
+            add(other) { return new Frac(this.n * other.d + other.n * this.d, this.d * other.d); }
+            sub(other) { return new Frac(this.n * other.d - other.n * this.d, this.d * other.d); }
+            mul(other) { return new Frac(this.n * other.n, this.d * other.d); }
+            div(other) { return new Frac(this.n * other.d, this.d * other.n); }
+            
+            isZero() { return this.n === 0; }
+            isOne() { return this.n === 1 && this.d === 1; }
+            isNegative() { return this.n < 0; }
+            
+            toString() {
+                if (this.d === 0) return 'NaN';
+                if (this.n === 0) return '0';
+                if (this.d === 1) return `${this.n}`;
+                return `${this.n}/${this.d}`;
+            }
+        }
+
+        function parseToFrac(str) {
+            if (!str || str.trim() === '') return new Frac(0, 1);
+            str = str.trim();
+            if (str.includes('/')) {
+                const parts = str.split('/');
+                if (parts.length !== 2) throw new Error("Invalid fraction format");
+                const n = parseFloat(parts[0]);
+                const d = parseFloat(parts[1]);
+                if (isNaN(n) || isNaN(d) || d === 0) throw new Error("Invalid fraction values");
+                return new Frac(n, d);
+            }
+            const num = parseFloat(str);
+            if (isNaN(num)) throw new Error(`Invalid number: ${str}`);
+            
+            const decStr = num.toString();
+            if (decStr.includes('.')) {
+                 const decPlaces = decStr.split('.')[1].length;
+                 const mult = Math.pow(10, Math.min(decPlaces, 4));
+                 return new Frac(Math.round(num * mult), mult);
+            }
+            return new Frac(num, 1);
+        }
+
+        function cloneMatrix(matrix) {
+            return matrix.map(row => row.map(cell => new Frac(cell.n, cell.d)));
+        }
+
+        function generateRREFSteps(inputMatrix) {
+            let matrix;
+            try {
+                matrix = inputMatrix.map(row => row.map(cellStr => parseToFrac(cellStr)));
+            } catch (e) {
+                throw new Error(e.message);
+            }
+
+            let steps = [];
+            let rows = matrix.length;
+            let cols = matrix[0].length;
+            let lead = 0;
+
+            steps.push({
+                desc: "Initial Augmented Matrix",
+                detail: "This is the starting matrix based on your system of equations.",
+                matrix: cloneMatrix(matrix),
+                highlights: []
+            });
+
+            for (let r = 0; r < rows; r++) {
+                if (cols <= lead) break;
+                
+                let i = r;
+                while (matrix[i][lead].isZero()) {
+                    i++;
+                    if (rows === i) {
+                        i = r;
+                        lead++;
+                        if (cols === lead) break;
+                    }
+                }
+                
+                if (cols === lead) break;
+
+                // 1. Swap rows
+                if (i !== r) {
+                    let temp = matrix[i];
+                    matrix[i] = matrix[r];
+                    matrix[r] = temp;
+                    steps.push({
+                        desc: `Swap Row ${r + 1} and Row ${i + 1}`,
+                        detail: `We need a non-zero pivot in column ${lead + 1}.`,
+                        matrix: cloneMatrix(matrix),
+                        highlights: [r, i]
+                    });
+                }
+
+                // 2. Normalize pivot row
+                let val = matrix[r][lead];
+                if (!val.isOne()) {
+                    for (let j = 0; j < cols; j++) {
+                        matrix[r][j] = matrix[r][j].div(val);
+                    }
+                    steps.push({
+                        desc: `Divide Row ${r + 1} by ${val.toString()}`,
+                        detail: `Scale the row to make the leading coefficient (pivot) exactly 1.`,
+                        matrix: cloneMatrix(matrix),
+                        highlights: [r]
+                    });
+                }
+
+                // 3. Eliminate other rows
+                let eliminatedAny = false;
+                for (let i = 0; i < rows; i++) {
+                    if (i !== r) {
+                        let val2 = matrix[i][lead];
+                        if (!val2.isZero()) {
+                            eliminatedAny = true;
+                            for (let j = 0; j < cols; j++) {
+                                let subVal = val2.mul(matrix[r][j]);
+                                matrix[i][j] = matrix[i][j].sub(subVal);
+                            }
+                            
+                            let opStr = val2.isNegative() 
+                                ? `Add ${new Frac(Math.abs(val2.n), val2.d).toString()} × Row ${r + 1} to Row ${i + 1}`
+                                : `Subtract ${val2.toString()} × Row ${r + 1} from Row ${i + 1}`;
+                                
+                            steps.push({
+                                desc: opStr,
+                                detail: `Use the pivot in Row ${r+1} to eliminate the entry in Row ${i+1}, Column ${lead+1}.`,
+                                matrix: cloneMatrix(matrix),
+                                highlights: [i]
+                            });
+                        }
+                    }
+                }
+                lead++;
+            }
+
+            // Interpret result
+            let vars = cols - 1;
+            let interpretation = { type: 'unique', text: '', details: [] };
+            
+            let inconsistent = false;
+            for (let r = 0; r < rows; r++) {
+                let allZeros = true;
+                for (let c = 0; c < vars; c++) {
+                    if (!matrix[r][c].isZero()) allZeros = false;
+                }
+                if (allZeros && !matrix[r][vars].isZero()) {
+                    inconsistent = true;
+                    interpretation = { 
+                        type: 'none', 
+                        text: 'No Solution',
+                        details: ['The system is inconsistent.', `Row ${r+1} translates to the impossible equation: 0 = ${matrix[r][vars].toString()}`]
+                    };
+                    break;
+                }
+            }
+
+            if (!inconsistent) {
+                let nonZeroRows = 0;
+                for (let r = 0; r < rows; r++) {
+                    let isZeroRow = true;
+                    for(let c=0; c < cols; c++) {
+                        if(!matrix[r][c].isZero()) isZeroRow = false;
+                    }
+                    if(!isZeroRow) nonZeroRows++;
+                }
+
+                if (nonZeroRows < vars) {
+                    const varNames = vars <= 3 ? ['x', 'y', 'z'] : Array.from({length: vars}, (_, i) => `x${i+1}`);
+                    const paramNames = ['t', 's', 'r', 'u', 'v', 'w'];
+                    
+                    let pivotCols = [];
+                    let rowForPivot = {};
+                    for (let r = 0; r < rows; r++) {
+                        for (let c = 0; c < vars; c++) {
+                            if (!matrix[r][c].isZero()) {
+                                pivotCols.push(c);
+                                rowForPivot[c] = r;
+                                break;
+                            }
+                        }
+                    }
+
+                    let freeCols = [];
+                    for (let c = 0; c < vars; c++) {
+                        if (!pivotCols.includes(c)) freeCols.push(c);
+                    }
+
+                    let paramMap = {};
+                    freeCols.forEach((c, idx) => {
+                        paramMap[c] = paramNames[idx % paramNames.length];
+                    });
+
+                    let solutionDetails = [];
+                    for (let c = 0; c < vars; c++) {
+                        if (freeCols.includes(c)) {
+                            solutionDetails.push(`${varNames[c]} = ${paramMap[c]} (free variable)`);
+                        } else {
+                            let r = rowForPivot[c];
+                            let constantTerm = matrix[r][vars];
+                            let rhsTerms = [];
+                            
+                            for (let j = c + 1; j < vars; j++) {
+                                let coef = matrix[r][j];
+                                if (!coef.isZero()) {
+                                    rhsTerms.push({
+                                        coef: new Frac(-coef.n, coef.d),
+                                        param: paramMap[j]
+                                    });
+                                }
+                            }
+
+                            let rhsString = "";
+                            if (constantTerm.isZero() && rhsTerms.length === 0) {
+                                rhsString = "0";
+                            } else {
+                                let components = [];
+                                if (!constantTerm.isZero()) components.push(constantTerm.toString());
+                                
+                                rhsTerms.forEach((term) => {
+                                    let isFirst = (components.length === 0);
+                                    let sign = term.coef.isNegative() ? "-" : "+";
+                                    let absCoef = new Frac(Math.abs(term.coef.n), term.coef.d);
+                                    let absStr = absCoef.isOne() ? "" : absCoef.toString();
+                                    
+                                    if (isFirst) {
+                                        components.push((sign === "-" ? "-" : "") + absStr + term.param);
+                                    } else {
+                                        components.push(`${sign} ${absStr}${term.param}`);
+                                    }
+                                });
+                                rhsString = components.join(" ");
+                            }
+                            solutionDetails.push(`${varNames[c]} = ${rhsString}`);
+                        }
+                    }
+
+                    interpretation = { 
+                        type: 'infinite', 
+                        text: 'Infinitely Many Solutions',
+                        details: ['The system is dependent. Expressed in parametric form:', ...solutionDetails]
+                    };
+                } else {
+                    let solutionDetails = [];
+                    const varNames = vars <= 3 ? ['x', 'y', 'z'] : Array.from({length: vars}, (_, i) => `x${i+1}`);
+                    for(let r=0; r < vars; r++) {
+                        solutionDetails.push(`${varNames[r]} = ${matrix[r][vars].toString()}`);
+                    }
+                    interpretation = { 
+                        type: 'unique', 
+                        text: 'Unique Solution Found', 
+                        details: solutionDetails 
+                    };
+                }
+            }
+
+            steps.push({
+                desc: "Final Reduced Row Echelon Form (RREF)",
+                detail: "The matrix is fully simplified.",
+                matrix: cloneMatrix(matrix),
+                highlights: [],
+                interpretation: interpretation
+            });
+
+            return steps;
+        }
+
+        // --- Application State & UI Logic ---
+        let appState = {
+            rows: 3,
+            cols: 4, // 3 vars + 1 constant
+            matrix: Array(3).fill().map(() => Array(4).fill(''))
+        };
+
+        const DOM = {
+            rowsInput: document.getElementById('rows-input'),
+            colsInput: document.getElementById('cols-input'),
+            headersContainer: document.getElementById('matrix-headers'),
+            inputsContainer: document.getElementById('matrix-inputs'),
+            errorContainer: document.getElementById('error-container'),
+            solutionArea: document.getElementById('solution-area'),
+            btnSolve: document.getElementById('btn-solve'),
+            btnClear: document.getElementById('btn-clear')
+        };
+
+        function init() {
+            lucide.createIcons();
+            
+            DOM.rowsInput.addEventListener('change', (e) => {
+                let val = parseInt(e.target.value) || 2;
+                val = Math.max(2, Math.min(5, val));
+                e.target.value = val;
+                resizeMatrix(val, appState.cols);
+            });
+
+            DOM.colsInput.addEventListener('change', (e) => {
+                let val = parseInt(e.target.value) || 2;
+                val = Math.max(2, Math.min(6, val));
+                e.target.value = val;
+                resizeMatrix(appState.rows, val + 1); // +1 for the constant column
+            });
+
+            DOM.btnClear.addEventListener('click', clearMatrix);
+            DOM.btnSolve.addEventListener('click', solveSystem);
+
+            renderMatrixInput();
+        }
+
+        function resizeMatrix(newRows, newCols) {
+            const newMatrix = Array(newRows).fill().map(() => Array(newCols).fill('0'));
+            for (let r = 0; r < Math.min(newRows, appState.matrix.length); r++) {
+                for (let c = 0; c < Math.min(newCols, appState.matrix[r].length); c++) {
+                    newMatrix[r][c] = appState.matrix[r][c] || '0';
+                }
+            }
+            appState.rows = newRows;
+            appState.cols = newCols;
+            appState.matrix = newMatrix;
+            
+            clearSolution();
+            renderMatrixInput();
+        }
+
+        function clearMatrix() {
+            appState.matrix = Array(appState.rows).fill().map(() => Array(appState.cols).fill('0'));
+            clearSolution();
+            renderMatrixInput();
+        }
+
+        function clearSolution() {
+            DOM.errorContainer.innerHTML = '';
+            DOM.solutionArea.innerHTML = '';
+        }
+
+        function handleCellInput(r, c, val) {
+            appState.matrix[r][c] = val;
+            clearSolution();
+        }
+
+        function renderMatrixInput() {
+            // Render Headers
+            const varsCount = appState.cols - 1;
+            const varLabels = varsCount <= 3 
+                ? ['x', 'y', 'z'].slice(0, varsCount) 
+                : Array.from({length: varsCount}, (_, i) => `x${i+1}`);
+            
+            let headersHTML = varLabels.map(lbl => `<div class="flex-1 text-center font-semibold text-slate-400 w-16">${lbl}</div>`).join('');
+            headersHTML += `<div class="w-4 border-l border-transparent"></div><div class="w-16 text-center font-semibold text-slate-400">=</div>`;
+            DOM.headersContainer.innerHTML = headersHTML;
+
+            // Render Input Grid
+            DOM.inputsContainer.style.gridTemplateColumns = `repeat(${appState.cols}, minmax(60px, auto))`;
+            DOM.inputsContainer.innerHTML = '';
+
+            for (let r = 0; r < appState.rows; r++) {
+                for (let c = 0; c < appState.cols; c++) {
+                    const isAugmented = c === appState.cols - 1;
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'relative';
+                    
+                    if (isAugmented) {
+                        wrapper.innerHTML += `<div class="absolute left-[-10px] top-[-10px] bottom-[-10px] w-px border-l-2 border-dashed border-slate-300 pointer-events-none"></div>`;
+                    }
+
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.value = appState.matrix[r][c];
+                    input.placeholder = '0';
+                    input.className = `w-16 text-center p-2 bg-white border border-slate-300 rounded shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-medium text-slate-700 transition-shadow ${isAugmented ? 'ml-4' : ''}`;
+                    
+                    input.addEventListener('input', (e) => handleCellInput(r, c, e.target.value));
+                    
+                    wrapper.appendChild(input);
+                    DOM.inputsContainer.appendChild(wrapper);
+                }
+            }
+        }
+
+        function buildStaticMatrixDisplay(matrix, highlights = []) {
+            const cols = matrix[0].length;
+            let html = `
+                <div class="relative inline-flex items-center justify-center bg-white p-4 rounded-lg shadow-sm border border-slate-200">
+                    <div class="absolute left-0 top-0 bottom-0 w-3 border-l-2 border-t-2 border-b-2 border-slate-800 rounded-l-lg pointer-events-none"></div>
+                    <div class="absolute right-0 top-0 bottom-0 w-3 border-r-2 border-t-2 border-b-2 border-slate-800 rounded-r-lg pointer-events-none"></div>
+                    <div class="grid gap-x-6 gap-y-3 items-center text-center font-medium text-slate-700" style="grid-template-columns: repeat(${cols}, minmax(40px, auto))">
+            `;
+
+            for (let r = 0; r < matrix.length; r++) {
+                for (let c = 0; c < cols; c++) {
+                    const isAugmented = c === cols - 1;
+                    const isHighlighted = highlights.includes(r);
+                    
+                    html += `<div class="relative py-1 px-2 rounded-md transition-colors duration-300 ${isHighlighted ? 'bg-blue-100 text-blue-900 font-bold' : ''} ${isAugmented ? 'pl-6' : ''}">`;
+                    if (isAugmented) {
+                        html += `<div class="absolute left-[-12px] top-[-10px] bottom-[-10px] w-px border-l-2 border-dashed border-slate-300 pointer-events-none"></div>`;
+                    }
+                    html += `${matrix[r][c].toString()}</div>`;
+                }
+            }
+
+            html += `</div></div>`;
+            return html;
+        }
+
+        function solveSystem() {
+            clearSolution();
+            
+            try {
+                const steps = generateRREFSteps(appState.matrix);
+                renderSteps(steps);
+                
+                setTimeout(() => {
+                    DOM.solutionArea.scrollIntoView({ behavior: 'smooth' });
+                }, 100);
+                
+            } catch (err) {
+                DOM.errorContainer.innerHTML = `
+                    <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-start gap-3 mt-6">
+                        <i data-lucide="alert-triangle" class="shrink-0 mt-0.5 w-5 h-5"></i>
+                        <p class="text-sm font-medium">${err.message || "Invalid input detected. Please ensure all fields are numbers or fractions (e.g., 1/2)."}</p>
+                    </div>
+                `;
+                lucide.createIcons({ root: DOM.errorContainer });
+            }
+        }
+
+        function renderSteps(steps) {
+            let html = `
+                <div class="space-y-6">
+                    <h2 class="text-2xl font-bold text-slate-900 flex items-center gap-2 mb-8 pl-2">
+                        <i data-lucide="check-circle-2" class="text-green-500 w-7 h-7"></i>
+                        Solution & Steps
+                    </h2>
+                    <div class="space-y-8 relative before:absolute before:inset-0 before:ml-6 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-1 before:bg-gradient-to-b before:from-blue-200 before:to-transparent">
+            `;
+
+            steps.forEach((step, idx) => {
+                const isLast = idx === steps.length - 1;
+                const markerText = idx === 0 ? "Start" : isLast ? "End" : idx;
+
+                let interpHTML = '';
+                if (step.interpretation) {
+                    const typeClasses = {
+                        'unique': 'bg-green-50 border-green-500 text-green-800',
+                        'infinite': 'bg-amber-50 border-amber-500 text-amber-800',
+                        'none': 'bg-red-50 border-red-500 text-red-800'
+                    };
+                    const colorClass = typeClasses[step.interpretation.type];
+                    
+                    let detailsList = step.interpretation.details.map(det => `
+                        <li class="flex items-center gap-2">
+                            <div class="w-1.5 h-1.5 rounded-full bg-slate-400"></div>
+                            ${det}
+                        </li>
+                    `).join('');
+
+                    interpHTML = `
+                        <div class="mt-6 p-4 rounded-xl border-l-4 ${colorClass.split(' ').slice(0, 2).join(' ')}">
+                            <h4 class="font-bold text-lg mb-2 ${colorClass.split(' ')[2]}">${step.interpretation.text}</h4>
+                            ${detailsList ? `<ul class="space-y-1 text-slate-700 font-medium">${detailsList}</ul>` : ''}
+                        </div>
+                    `;
+                }
+
+                html += `
+                    <div class="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group">
+                        <div class="flex items-center justify-center w-12 h-12 rounded-full border-4 border-slate-50 bg-blue-100 text-blue-600 font-bold shadow-sm shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 text-sm">
+                            ${markerText}
+                        </div>
+                        <div class="w-[calc(100%-4rem)] md:w-[calc(50%-3rem)] bg-white rounded-2xl shadow-sm border border-slate-200 p-6 md:p-8 hover:shadow-md transition-shadow">
+                            <div class="mb-6">
+                                <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                                    <i data-lucide="chevron-right" class="text-blue-500 w-5 h-5"></i> 
+                                    ${step.desc}
+                                </h3>
+                                ${step.detail ? `<p class="text-sm text-slate-500 mt-1 pl-7">${step.detail}</p>` : ''}
+                            </div>
+                            <div class="flex justify-center bg-slate-50 py-6 rounded-xl border border-slate-100 overflow-x-auto">
+                                ${buildStaticMatrixDisplay(step.matrix, step.highlights)}
+                            </div>
+                            ${interpHTML}
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += `</div></div>`;
+            DOM.solutionArea.innerHTML = html;
+            lucide.createIcons({ root: DOM.solutionArea });
+        }
+
+        // Initialize application
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
